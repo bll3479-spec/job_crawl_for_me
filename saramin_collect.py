@@ -49,9 +49,16 @@ def parse(html):
 seen = {}
 all_jobs = []
 before = 0      #제거 전 건수 세기
+failed = []   #실패한 키워드와 페이지 기록용 리스트
 for keyword in KEYWORDS:
     for page in range(1, PAGES + 1):
-        jobs = parse(fetch(keyword, page))
+        try:
+            jobs = parse(fetch(keyword, page))
+        except requests.RequestException as e:  #요청관련 에러만 잡기
+            print("실패:", keyword, "페이지" + str(page), e)
+            failed.append((keyword, page))
+            time.sleep(2.5)
+            continue
         before += len(jobs)
         for job in jobs:
             m = re.search(r"rec_idx=(\d+)", job["link"])
@@ -72,16 +79,17 @@ multi = [j for j in all_jobs if len(j["keywords"]) > 1]
 print("키워드 2개 이상 공고:", len(multi), "건")
 if multi:
     print(multi[0]["title"], multi[0]["keywords"])
-
-
 print("총", len(all_jobs), "건")
 print("제거 전", before, "건 -> 제거 후", len(all_jobs), "건")
+print("실패한 요청:", len(failed), "건")
+if failed:
+    print(failed)
 
 filename = f"saramin_{date.today():%Y%m%d}.csv"
 for job in all_jobs:
     job["keywords"] = ", ".join(job["keywords"])  #리스트를 문자열로 바꾸기
 
 with open(filename, "w", newline="", encoding="utf-8-sig") as f:
-    writer = csv.DictWriter(f, fieldnames=["title", "company", "link", "conditions", "deadline", "link", "rec_idx", "keywords"])
+    writer = csv.DictWriter(f, fieldnames=["title", "company", "conditions", "deadline", "link", "rec_idx", "keywords"])
     writer.writeheader()
     writer.writerows(all_jobs)
